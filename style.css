@@ -504,3 +504,14 @@ html.mode-pilih [data-pilih-hover] { outline: 2px solid #f43f5e !important; outl
 [hidden] { display: none !important; }
 .tabel td.tgl, .rinci td:nth-child(2) { white-space: nowrap; }
 .cincin .jalur { stroke: color-mix(in srgb, var(--teks) 10%, transparent); }
+
+/* Logo organisasi & avatar (GAMBAR di app.js) */
+.logo.pakai-foto, .kop-logo.pakai-foto { background: #fff; overflow: hidden; }
+.logo img, .kop-logo img, .gbr-prev img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.logo .ini, .kop-logo .ini, .gbr-prev .ini { font-size: 15px; font-weight: 800; }
+.gbr-baris { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gbr-prev { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; overflow: hidden; border: 1px dashed var(--garis, currentColor); flex: none; }
+.gbr-prev svg { width: 24px; height: 24px; opacity: .6; }
+.fld .gbr-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.fld-gambar label.tombol { position: relative; cursor: pointer; }
+.fld-gambar label.tombol:focus-within { outline: 2px solid var(--utama); outline-offset: 2px; }

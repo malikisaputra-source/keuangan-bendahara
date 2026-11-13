@@ -12,6 +12,27 @@
   var DI_IFRAME = (function () { try { return window.self !== window.top; } catch (e) { return true; } })();
   var GERAK = !matchMedia('(prefers-reduced-motion: reduce)').matches;
   var NAMA_TEMA = (window.TEMA && TEMA.nama) || 'Kas Rapi';
+  // ---------- Logo & foto (SATU tempat pengaturan gambar) ----------
+  // Logo organisasi (kop laporan + sidebar Mode Bendahara) & avatar (Mode Pribadi) diunggah di menu Atur,
+  // diperkecil ke GAMBAR.maks px lalu disimpan sebagai dataURL di localStorage (ikut cadangan .json).
+  var GAMBAR = { maks: 400, ikonBawaan: 'dompet', ikonKop: 'masjid' };
+  function kecilkan(file, cb) {
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onload = function () {
+      var s = Math.min(1, GAMBAR.maks / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); var png = c.toDataURL('image/png'); cb(png.length > 300000 ? c.toDataURL('image/jpeg', 0.8) : png);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); toast('Gambar tidak bisa dibaca'); };
+    img.src = url;
+  }
+  function gambarAman(s) { return /^data:image\/(png|jpe?g|webp|gif);base64,/.test(s || ''); }
+  function inisial(s) { return String(s || '?').trim().split(/\s+/).map(function (w) { return w[0] || ''; }).join('').slice(0, 2).toUpperCase() || '?'; }
+  // <img> dengan cadangan inisial bila gagal dimuat (ditangani pendengar 'error' di bawah)
+  function gbr(src, nama, cls) { return '<img class="' + (cls || '') + '" src="' + esc(src) + '" alt="" data-inisial="' + esc(inisial(nama)) + '">'; }
+  window.addEventListener('error', function (e) {
+    var t = e.target; if (t && t.tagName === 'IMG' && t.dataset.inisial) { var s = document.createElement('b'); s.className = 'ini'; s.textContent = t.dataset.inisial; t.replaceWith(s); }
+  }, true);
   var BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   var BLN = BULAN.map(function (b) { return b.slice(0, 3); });
 
@@ -53,10 +74,10 @@
           { id: 'sampingan', nama: 'Usaha Sampingan', ikon: 'toko', warna: WARNA[10], jenis: 'masuk', anggaran: 0 },
           { id: 'lain-m', nama: 'Pemasukan Lain', ikon: 'hadiah', warna: WARNA[11], jenis: 'masuk', anggaran: 0 }
         ],
-        transaksi: [], target: []
+        transaksi: [], target: [], nama: '', avatar: ''
       },
       bendahara: {
-        org: 'Nama Organisasi', alamat: '', kota: '', bendahara: '', ketua: '',
+        org: 'Nama Organisasi', alamat: '', kota: '', bendahara: '', ketua: '', logo: '',
         saldoAwal: 0, tglAwal: hariIni().slice(0, 8) + '01',
         pos: [
           { id: 'infak', nama: 'Infak / Iuran', jenis: 'masuk', ikon: 'sedekah' },
@@ -184,12 +205,19 @@
     bendahara: [['ringkas', 'Ringkasan', 'rumah'], ['bku', 'Buku Kas', 'buku'], ['laporan-kas', 'Laporan', 'cetak'], ['pos', 'Rekap Pos', 'folder'], ['atur', 'Atur', 'atur']]
   };
   var halAktif = null;
+  function renderMerek() { // logo sidebar: logo organisasi (Bendahara) / avatar (Pribadi) / ikon bawaan
+    var src = D.mode === 'bendahara' ? B().logo : P().avatar, nama = D.mode === 'bendahara' ? B().org : (P().nama || NAMA_TEMA);
+    var el = $('.merek .logo'); if (!el) return;
+    el.classList.toggle('pakai-foto', gambarAman(src));
+    el.innerHTML = gambarAman(src) ? gbr(src, nama) : '<svg><use href="#i-' + GAMBAR.ikonBawaan + '"/></svg>';
+  }
   function renderMenu() {
     var items = MENU[D.mode];
     var html = items.map(function (m) { return '<button class="nav" type="button" data-hal="' + m[0] + '"><svg aria-hidden="true"><use href="#i-' + m[2] + '"/></svg><span>' + m[1] + '</span></button>'; }).join('');
     $('#menu').innerHTML = html;
     $('#bawah').innerHTML = items.filter(function (m) { return m[0] !== 'tabungan' && m[0] !== 'pos'; }).map(function (m) { return '<button class="nav" type="button" data-hal="' + m[0] + '"><svg aria-hidden="true"><use href="#i-' + m[2] + '"/></svg><span>' + m[1] + '</span></button>'; }).join('');
     $('#labelMode').textContent = D.mode === 'pribadi' ? 'Mode Pribadi' : 'Mode Bendahara';
+    renderMerek();
     $('#fab').setAttribute('aria-label', D.mode === 'pribadi' ? 'Catat transaksi' : 'Catat kas');
   }
   function buka(h, tanpaFokus) {
@@ -397,7 +425,7 @@
   function lembarLaporan(h) {
     var b = B(), rp2 = rekapPos(h.isi), masukPos = rp2.filter(function (x) { return x.p.jenis === 'masuk'; }), keluarPos = rp2.filter(function (x) { return x.p.jenis === 'keluar'; });
     var ttdTgl = (b.kota ? esc(b.kota) + ', ' : '') + tglTampil(periode.sampai < hariIni() ? periode.sampai : hariIni());
-    return '<header class="kop"><span class="kop-logo" aria-hidden="true"><svg><use href="#i-masjid"/></svg></span><div><h2>' + esc(b.org) + '</h2><p>' + esc(b.alamat) + '</p></div></header>' +
+    return '<header class="kop"><span class="kop-logo' + (gambarAman(b.logo) ? ' pakai-foto' : '') + '" aria-hidden="true">' + (gambarAman(b.logo) ? gbr(b.logo, b.org) : '<svg><use href="#i-' + GAMBAR.ikonKop + '"/></svg>') + '</span><div><h2>' + esc(b.org) + '</h2><p>' + esc(b.alamat) + '</p></div></header>' +
       '<h3 class="judul-lap">LAPORAN KEUANGAN<br><small>Periode ' + tglTampil(periode.dari) + ' s.d. ' + tglTampil(periode.sampai) + '</small></h3>' +
       '<table class="tabel ringkas-lap"><tbody><tr><td>Saldo awal periode</td><td class="kanan">' + rp(h.awal) + '</td></tr><tr><td>Jumlah pemasukan</td><td class="kanan">' + rp(h.masuk) + '</td></tr><tr><td>Jumlah pengeluaran</td><td class="kanan">(' + rp(h.keluar) + ')</td></tr><tr class="total"><td>Saldo akhir periode</td><td class="kanan">' + rp(h.akhir) + '</td></tr></tbody></table>' +
       '<div class="rekap-dua"><table class="tabel"><caption>Rekap pemasukan per pos</caption><tbody>' + masukPos.map(function (x) { return '<tr><td>' + esc(x.p.nama) + '</td><td class="kanan">' + rp(x.n) + '</td></tr>'; }).join('') + '<tr class="total"><td>Jumlah</td><td class="kanan">' + rp(h.masuk) + '</td></tr></tbody></table>' +
@@ -426,10 +454,13 @@
   RENDER.atur = function () {
     var b = B();
     var bagianMode = D.mode === 'pribadi' ?
+      '<article class="panel" data-bagian="panel"><h2>Profil</h2><form id="fProfil" class="form">' + fldGambar('Foto profil / avatar', 'avatar', P().avatar, P().nama || NAMA_TEMA) +
+      fld('Nama panggilan (opsional)', 'nama', P().nama || '', 'maxlength="40"') + '<button class="tombol utama" type="submit" data-bagian="utama"><svg><use href="#i-cek"/></svg><span>Simpan profil</span></button></form></article>' +
       '<article class="panel" data-bagian="panel"><h2>Dompet</h2><p class="redup">Saldo awal tiap dompet. Saldo sekarang dihitung otomatis dari transaksi.</p><ul class="daftar">' + P().dompet.map(function (d) { return '<li><button type="button" class="baris" data-dompet="' + d.id + '">' + ikon(ikonDompet(d.jenis), 'var(--utama)') + '<span class="isi"><b>' + esc(d.nama) + '</b><small>Saldo awal ' + rp(d.saldoAwal) + '</small></span><span class="nilai">' + rp(saldoDompet(d.id)) + '</span></button></li>'; }).join('') + '</ul><div class="baris-tombol"><button type="button" class="tombol garis" data-aksi="dompet-baru"><svg><use href="#i-plus"/></svg><span>Tambah dompet</span></button><button type="button" class="tombol garis" data-aksi="pindah"><svg><use href="#i-tukar"/></svg><span>Pindah saldo</span></button></div></article>' +
       '<article class="panel" data-bagian="panel"><h2>Kategori</h2><div class="chip-wadah">' + P().kategori.map(function (k) { return '<button type="button" class="chip" data-kat-ubah="' + k.id + '"><span class="titik" style="background:' + k.warna + '"></span>' + esc(k.nama) + '</button>'; }).join('') + '</div><button type="button" class="tombol garis" data-aksi="kat-baru"><svg><use href="#i-plus"/></svg><span>Tambah kategori</span></button></article>'
       :
       '<article class="panel" data-bagian="panel"><h2>Identitas organisasi</h2><form id="fOrg" class="form">' +
+      fldGambar('Logo organisasi (kop laporan, persegi)', 'logo', b.logo, b.org) +
       fld('Nama organisasi', 'org', b.org) + fld('Alamat', 'alamat', b.alamat) + fld('Kota (untuk tanggal tanda tangan)', 'kota', b.kota) +
       '<div class="dua-kolom">' + fld('Nama bendahara', 'bendahara', b.bendahara) + fld('Nama ketua', 'ketua', b.ketua) + '</div>' +
       '<div class="dua-kolom">' + fld('Saldo awal (Rp)', 'saldoAwal', b.saldoAwal ? b.saldoAwal.toLocaleString('id-ID') : '', 'inputmode="numeric" data-rupiah') + fld('Per tanggal', 'tglAwal', b.tglAwal, 'type="date"') + '</div>' +
@@ -442,6 +473,11 @@
       '<article class="panel" data-bagian="panel"><h2>Cadangan &amp; pindah HP</h2><p class="redup">Data hanya tersimpan di browser ini. Unduh cadangan rutin, lalu pulihkan di HP/laptop lain.</p><div class="baris-tombol"><button type="button" class="tombol utama" data-aksi="backup" data-bagian="utama"><svg><use href="#i-unduh"/></svg><span>Unduh cadangan (.json)</span></button><label class="tombol garis"><svg><use href="#i-unggah"/></svg><span>Pulihkan</span><input type="file" id="fPulih" accept="application/json,.json" class="sr"></label></div></article>' +
       '<article class="panel bahaya" data-bagian="panel"><h2>Mulai dari nol</h2><p class="redup">Hapus data contoh mode <b>' + (D.mode === 'pribadi' ? 'Pribadi' : 'Bendahara') + '</b> supaya catatan bersih.</p><button type="button" class="tombol bahaya-btn" data-aksi="kosongkan"><svg><use href="#i-hapus"/></svg><span>Kosongkan data mode ini</span></button></article></div>';
   };
+  function fldGambar(label, kunci, src, nama) {
+    return '<div class="fld fld-gambar"><span>' + label + '</span><div class="gbr-baris"><span class="gbr-prev">' + (gambarAman(src) ? gbr(src, nama) : '<svg aria-hidden="true"><use href="#i-' + (kunci === 'avatar' ? 'orang' : GAMBAR.ikonKop) + '"/></svg>') + '</span>' +
+      '<label class="tombol garis"><svg><use href="#i-unduh"/></svg><span>Pilih gambar</span><input type="file" accept="image/*" class="gbr-input" data-unggah="' + kunci + '"></label>' +
+      (gambarAman(src) ? '<button type="button" class="tombol garis" data-hapus-gambar="' + kunci + '">Hapus</button>' : '') + '</div><small class="redup">Diperkecil otomatis ke ' + GAMBAR.maks + ' px, tersimpan di browser ini.</small></div>';
+  }
   function fld(label, nama, nilai, attr) { return '<label class="fld"><span>' + label + '</span><input name="' + nama + '" value="' + esc(nilai) + '" ' + (attr || '') + '></label>'; }
 
   // ---------- Dialog & form ----------
@@ -695,6 +731,14 @@
     var kf = $('#katF'); if (kf) kf.addEventListener('change', function () { filterTx.kat = kf.value; ulang(); });
     var qk = $('#qKas'); if (qk) qk.addEventListener('input', debounce(function () { periode.q = qk.value; var p0 = qk.selectionStart; ulang(); var n = $('#qKas'); n.focus(); n.setSelectionRange(p0, p0); }, 250));
     ['pDari', 'pSampai'].forEach(function (id) { var i = $('#' + id); if (i) i.addEventListener('change', function () { var d = $('#pDari').value, s = $('#pSampai').value; if (d && s && d <= s) { periode.dari = d; periode.sampai = s; ulang(); } else toast('Tanggal "dari" harus sebelum "sampai"'); }); });
+    $$('[data-unggah]').forEach(function (inp) { inp.addEventListener('change', function () {
+      var f = inp.files && inp.files[0], k = inp.dataset.unggah; inp.value = ''; if (!f || !/^image\//.test(f.type)) return;
+      kecilkan(f, function (d) { if (k === 'logo') B().logo = d; else P().avatar = d; simpan(); renderMerek(); ulang(); toast(k === 'logo' ? 'Logo organisasi disimpan' : 'Foto profil disimpan'); });
+    }); });
+    $$('[data-hapus-gambar]').forEach(function (bt) { bt.addEventListener('click', function () {
+      if (bt.dataset.hapusGambar === 'logo') B().logo = ''; else P().avatar = ''; simpan(); renderMerek(); ulang(); toast('Gambar dihapus');
+    }); });
+    var fpr = $('#fProfil'); if (fpr) fpr.addEventListener('submit', function (e) { e.preventDefault(); P().nama = nilaiForm(fpr).nama.trim(); simpan(); renderMerek(); toast('Profil disimpan'); });
     var fo = $('#fOrg'); if (fo) fo.addEventListener('submit', function (e) {
       e.preventDefault(); var v = nilaiForm(fo), b = B();
       if (!v.org.trim()) { toast('Nama organisasi wajib diisi'); return; }
